@@ -1,0 +1,10 @@
+Python is a high-level programming language commonly used in
+automation, data science, machine learning, and web development.
+
+A list is an ordered mutable collection.
+
+A tuple is an ordered immutable collection.
+
+A dictionary stores data as key-value pairs.
+
+A function is a reusable block of code that performs a task.

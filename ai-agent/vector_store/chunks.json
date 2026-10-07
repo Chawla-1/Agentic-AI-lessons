@@ -1,0 +1,78 @@
+[
+  {
+    "source": "ml.txt",
+    "text": "Machine learning is a field of artificial intelligence where\nsystems learn patterns from data."
+  },
+  {
+    "source": "ml.txt",
+    "text": "Overfitting happens when a model learns the training data too\nclosely and performs poorly on unseen data."
+  },
+  {
+    "source": "ml.txt",
+    "text": "Underfitting happens when a model is too simple to capture\nimportant patterns in the data."
+  },
+  {
+    "source": "ml.txt",
+    "text": "A training set is used to learn model parameters."
+  },
+  {
+    "source": "ml.txt",
+    "text": "A validation set is used to evaluate the model during development."
+  },
+  {
+    "source": "ml.txt",
+    "text": "A test set is used to evaluate the final model on unseen data."
+  },
+  {
+    "source": "ml.txt",
+    "text": "Supervised learning uses labeled examples."
+  },
+  {
+    "source": "ml.txt",
+    "text": "Unsupervised learning works with data without target labels."
+  },
+  {
+    "source": "neural_networks.txt",
+    "text": "A neural network consists of interconnected computational units\ncalled neurons."
+  },
+  {
+    "source": "neural_networks.txt",
+    "text": "A perceptron is a simple artificial neuron."
+  },
+  {
+    "source": "neural_networks.txt",
+    "text": "Deep neural networks contain multiple layers."
+  },
+  {
+    "source": "neural_networks.txt",
+    "text": "An activation function introduces non-linearity into a neural\nnetwork."
+  },
+  {
+    "source": "neural_networks.txt",
+    "text": "Common activation functions include ReLU, sigmoid, and tanh."
+  },
+  {
+    "source": "neural_networks.txt",
+    "text": "A convolutional neural network is commonly used for image\nprocessing and computer vision."
+  },
+  {
+    "source": "python.txt",
+    "text": "Python is a high-level programming language commonly used in\nautomation, data science, machine learning, and web development."
+  },
+  {
+    "source": "python.txt",
+    "text": "A list is an ordered mutable collection."
+  },
+  {
+    "source": "python.txt",
+    "text": "A tuple is an ordered immutable collection."
+  },
+  {
+    "source": "python.txt",
+    "text": "A dictionary stores data as key-value pairs."
+  },
+  {
+    "source": "python.txt",
+    "text": "A function is a reusable block of code that performs a task."
+  }
+]

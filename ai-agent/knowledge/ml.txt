@@ -1,0 +1,18 @@
+Machine learning is a field of artificial intelligence where
+systems learn patterns from data.
+
+Overfitting happens when a model learns the training data too
+closely and performs poorly on unseen data.
+
+Underfitting happens when a model is too simple to capture
+important patterns in the data.
+
+A training set is used to learn model parameters.
+
+A validation set is used to evaluate the model during development.
+
+A test set is used to evaluate the final model on unseen data.
+
+Supervised learning uses labeled examples.
+
+Unsupervised learning works with data without target labels.

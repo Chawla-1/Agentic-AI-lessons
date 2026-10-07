@@ -1,0 +1,14 @@
+A neural network consists of interconnected computational units
+called neurons.
+
+A perceptron is a simple artificial neuron.
+
+Deep neural networks contain multiple layers.
+
+An activation function introduces non-linearity into a neural
+network.
+
+Common activation functions include ReLU, sigmoid, and tanh.
+
+A convolutional neural network is commonly used for image
+processing and computer vision.

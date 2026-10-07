@@ -1,0 +1,7 @@
+@"
+agent-env/
+__pycache__/
+*.pyc
+.env
+*.text
+"@ | Out-File -Encoding utf8 .gitignore
