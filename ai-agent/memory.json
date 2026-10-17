@@ -1,7 +1,19 @@
 {
     "name": "Aaryan",
-    "age": 21,
+    "learning": [
+        "AI agents"
+    ],
     "programming_languages": [
+        "Python",
         "C++"
+    ],
+    "tools": [
+        "JSON",
+        "SQL",
+        "VS Code",
+        "Android Studio"
+    ],
+    "projects": [
+        "Java"
     ]
 }
