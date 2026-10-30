@@ -1,0 +1,43 @@
+AI Agent Engineering Roadmap
+
+Phase 0 · Foundations already covered
+[ ] V1–V3 — Agent fundamentals: Chatbot logic, structured tool calls, argument extraction and simulated decisions.
+[ ] V4–V6 — Real agent loop and tools: Execution loop, tool registry, schemas, local Qwen3 integration.
+[ ] V7–V8 — Conversation and planning: History, session commands, plans and multi-step execution.
+[ ] V9–V9.3 — RAG and semantic search: Document chunking, TF-IDF, embeddings and persistent FAISS index.
+[ ] V10–V10.2 — Verification and routing: Reflection, deterministic checks, error handling and math routing.
+[ ] V11–V11.1 — Persistent memory: JSON persistence, fact extraction and memory commands.
+
+Phase 1 · Reliability and intelligence
+[ ] V11.2 — Deterministic memory retrieval: Retrieve name, age and languages directly from structured storage; test list merging, corrections and restarts.
+[ ] V12 — Semantic long-term memory: Embed memories, index them, retrieve relevant facts and filter irrelevant results.
+[ ] V13 — Memory lifecycle: Add, update, merge, forget, expire and resolve conflicting memories with provenance.
+[ ] V14 — Reliable planning and recovery: Preconditions, dependencies, execution state, retries, replanning, stopping conditions and safe expression parsing.
+[ ] V14.1 — Structured outputs and validation: Validate model-generated JSON against schemas, handle malformed outputs and enforce tool argument types.
+[ ] V14.2 — Agent security fundamentals: Prompt injection, untrusted retrieved content, least-privilege tools, approval gates and action limits.
+
+Phase 2 · Advanced agent execution
+[ ] V15 — Parallel tool execution: Run independent operations concurrently; preserve dependencies, timeouts, cancellation and error isolation.
+[ ] V16 — Multi-agent architecture: Specialist agents, supervisor, task delegation, shared state, result aggregation and disagreement resolution.
+[ ] V16.1 — Human-in-the-loop workflows: Pause for approvals, resume safely, handle user corrections and persist workflow state.
+[ ] V17 — Evaluation and observability: Test datasets, task success rates, tool-call accuracy, retrieval quality, traces, latency, token usage and failure analysis.
+
+Phase 3 · Frameworks
+[ ] F1 — LangChain fundamentals: Models, prompts, messages, output parsers, tools, structured outputs and retrieval.
+[ ] F2 — LangChain agents: Tool-calling agents, execution loops, tool errors and framework-managed orchestration.
+[ ] F3 — LangGraph fundamentals: State, nodes, edges, conditional routing, loops and termination conditions.
+[ ] F4 — LangGraph persistence: Checkpointers, thread-level state, memory, interrupts, human approval and resumable workflows.
+[ ] F5 — Framework comparison: Rebuild the same workflow with raw Python and frameworks; compare control, complexity, debugging and maintainability.
+
+Phase 4 · Deployment
+[ ] V18.1 — API and application layer: FastAPI, request validation, streaming responses, sessions and frontend integration.
+[ ] V18.2 — Database and persistence: SQLite/PostgreSQL, durable job state, migration strategy and database-backed memory.
+[ ] V18.3 — Production safety: Authentication, authorization, secrets management, audit logs, rate limits and data retention.
+[ ] V18.4 — Docker and deployment: Containerization, environment configuration, health checks, CI/CD and deployment.
+[ ] V18.5 — Monitoring and optimization: Logs, traces, latency, resource use, cost tracking where applicable, fallbacks and incident debugging.
+
+Phase 5 · Capstone applications
+[ ] P1 — Personal knowledge and research agent: Retrieve local documents, cite evidence, compare sources, produce a report and save project decisions.
+[ ] P2 — Practical automation agent: Handle a defined workflow using approved file, email or task tools, with validation and confirmation before consequential actions.
+[ ] P3 — Trading research assistant: Analyze historical data, compute indicators, retrieve company information, backtest strategies and produce risk-aware reports without autonomous live trading.
+[ ] P4 — Final integrated agent: Combine planning, tools, RAG, memory, evaluation, framework-based workflows and deployment in a documented project.

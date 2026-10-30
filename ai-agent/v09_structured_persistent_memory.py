@@ -118,6 +118,7 @@ Rules:
   hobbies, and tools, ALWAYS return a JSON list, even for one item.
 - Do not infer or invent facts.
 - Do not save questions, temporary requests, or general knowledge.
+- If the user mentions working on a project IN a programming language (e.g. "project in Java"), assign that language to 'programming_languages', NOT 'projects'. 'projects' is strictly for specific project names (e.g. "weather app", "portfolio website").
 - Return ONLY valid JSON, with no Markdown fences.
 - If there is no useful user-specific fact, return {}.
 
@@ -132,6 +133,10 @@ User: I am also learning Python.
 Output: {"learning": ["Python"]}
 User: I know Python and Java.
 Output: {"programming_languages": ["Python", "Java"]}
+User: I am making a project in Java.
+Output: {"programming_languages": ["Java"]}
+User: I am building a portfolio website in React.
+Output: {"projects": ["portfolio website"], "skills": ["React"]}
 User: I am studying AI agents.
 Output: {"learning": ["AI agents"]}
 User: I use Android Studio.
@@ -150,6 +155,22 @@ Output: {}'''
         if not isinstance(data, dict):
             return {}
 
+        # Disambiguation safety check: programming languages shouldn't be under 'projects'
+        common_languages = {
+            "python", "c++", "c", "java", "javascript", "typescript",
+            "c#", "rust", "go", "ruby", "php", "swift", "kotlin", "sql", "html", "css"
+        }
+        if "projects" in data and isinstance(data["projects"], list):
+            valid_projects = []
+            for p in data["projects"]:
+                if isinstance(p, str) and p.strip().lower() in common_languages:
+                    data.setdefault("programming_languages", [])
+                    if isinstance(data["programming_languages"], list) and p not in data["programming_languages"]:
+                        data["programming_languages"].append(p)
+                else:
+                    valid_projects.append(p)
+            data["projects"] = valid_projects
+
         # Basic validation: allow only known memory fields.
         allowed_fields = set(MEMORY_LABELS)
         return {
@@ -167,13 +188,13 @@ Output: {}'''
 
 
 def update_memory(user_input):
-    """Merge list-like facts and update single-value facts, logging only saved changes."""
+    """Merge list-like facts and update single-value facts, returning newly added/changed facts."""
     extracted = extract_memory(user_input)
 
     if not extracted:
-        return False
+        return {}
 
-    changed_keys = []
+    newly_added = {}
 
     for key, value in extracted.items():
         if key in LIST_FIELDS:
@@ -191,6 +212,7 @@ def update_memory(user_input):
                 old_values = []
 
             merged = list(old_values)
+            added_items = []
             for item in new_values:
                 if not isinstance(item, str) or not item.strip():
                     continue
@@ -201,10 +223,11 @@ def update_memory(user_input):
                 )
                 if not duplicate:
                     merged.append(item)
+                    added_items.append(item)
 
-            if merged != memory.get(key):
+            if added_items:
                 memory[key] = merged
-                changed_keys.append(key)
+                newly_added[key] = added_items
 
         else:
             # Reject nulls, booleans, and unsupported types instead of storing them.
@@ -216,16 +239,16 @@ def update_memory(user_input):
                 continue
             if memory.get(key) != value:
                 memory[key] = value
-                changed_keys.append(key)
+                newly_added[key] = value
 
-    if changed_keys:
+    if newly_added:
         save_memory(memory)
         print("\nMemory updated:")
-        for key in changed_keys:
-            print(f"{key}: {memory[key]}")
-        return True
+        for key, val in newly_added.items():
+            print(f"{key}: {val}")
+        return newly_added
 
-    return False
+    return {}
 
 
 def retrieve_memory_answer(user_input):
@@ -517,10 +540,16 @@ def extract_math_expression(user_input):
 
 # ---------- Agent ----------
 
+MAX_HISTORY_TURNS = 10
+conversation_history = []
+
+
 def run_agent(user_input):
     # Answer memory questions directly so the LLM doesn't have to infer stored facts.
     memory_answer = retrieve_memory_answer(user_input)
     if memory_answer is not None:
+        conversation_history.append({"role": "user", "content": user_input})
+        conversation_history.append({"role": "assistant", "content": memory_answer})
         return memory_answer
 
     math_expression = extract_math_expression(user_input)
@@ -529,28 +558,43 @@ def run_agent(user_input):
         result = calculator(math_expression)
         print(f"Result: {result}")
         if result.startswith("ERROR:"):
-            return f"Calculation failed: {result}"
-        return f"The result is {result}."
+            answer = f"Calculation failed: {result}"
+        else:
+            answer = f"The result is {result}."
+        conversation_history.append({"role": "user", "content": user_input})
+        conversation_history.append({"role": "assistant", "content": answer})
+        return answer
 
-    # Don't try to memorize commands or ordinary questions unless extraction finds a fact.
-    update_memory(user_input)
+    # Update long-term memory and check what newly changed facts were learned
+    newly_added = update_memory(user_input)
 
     memory_context = ""
     if memory:
-        memory_context = "\n\nLong-term memory (stored user facts):\n" + json.dumps(memory, indent=2, ensure_ascii=False)
+        memory_context = "\n\nLong-term memory (stored user facts across sessions):\n" + json.dumps(memory, indent=2, ensure_ascii=False)
 
-    messages = [
-        {
-            "role": "system",
-            "content": """You are an AI agent.
+    new_facts_note = ""
+    if newly_added:
+        new_facts_note = (
+            f"\n\nNOTICE: The user just shared these new facts in this turn: {json.dumps(newly_added, ensure_ascii=False)}. "
+            "Acknowledge them naturally and confirm what was just saved."
+        )
+
+    system_prompt = """You are an AI agent.
 Use the user's long-term memory when relevant, but do not invent facts.
 Use search_knowledge for questions about the local knowledge base.
 Use calculator for mathematical calculations.
 For weather, clearly state that live weather is unavailable unless a live service is connected.
 If the stored memory does not contain a requested personal fact, say you do not have it saved.
-""" + memory_context,
-        },
-        {"role": "user", "content": user_input},
+""" + memory_context + new_facts_note
+
+    conversation_history.append({"role": "user", "content": user_input})
+
+    # Sliding window: keep only the last MAX_HISTORY_TURNS turns (2 messages per turn)
+    recent_history = conversation_history[-(MAX_HISTORY_TURNS * 2):]
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        *recent_history,
     ]
 
     retries = 0
@@ -558,6 +602,8 @@ If the stored memory does not contain a requested personal fact, say you do not 
         try:
             response = ollama.chat(model="qwen3", messages=messages, tools=tool_definitions)
         except Exception as error:
+            if conversation_history:
+                conversation_history.pop()  # remove failed turn
             return f"Could not contact Ollama. Check that Ollama is running and Qwen3 is available. Details: {error}"
 
         message = response.get("message", {})
@@ -565,7 +611,9 @@ If the stored memory does not contain a requested personal fact, say you do not 
         tool_calls = message.get("tool_calls", [])
 
         if not tool_calls:
-            return message.get("content", "")
+            final_content = message.get("content", "")
+            conversation_history.append({"role": "assistant", "content": final_content})
+            return final_content
 
         for call in tool_calls:
             function = call.get("function", {})
@@ -585,7 +633,9 @@ If the stored memory does not contain a requested personal fact, say you do not 
             if decision == "RETRY":
                 retries += 1
                 if retries > MAX_RETRIES:
-                    return "Tool failed after several attempts."
+                    fail_msg = "Tool failed after several attempts."
+                    conversation_history.append({"role": "assistant", "content": fail_msg})
+                    return fail_msg
                 messages.append({
                     "role": "user",
                     "content": f"The tool result was not useful: {result}. Try a different approach or explain the limitation.",
@@ -594,13 +644,15 @@ If the stored memory does not contain a requested personal fact, say you do not 
 
             messages.append({"role": "tool", "tool_name": name, "content": result})
 
-    return "Maximum iterations reached."
+    fallback_msg = "Maximum iterations reached."
+    conversation_history.append({"role": "assistant", "content": fallback_msg})
+    return fallback_msg
 
 
 # ---------- Main ----------
 
 if __name__ == "__main__":
-    print("AI Agent V11.2 started. Type /memory to inspect memory, /clear_memory to clear it, or exit to quit.")
+    print("AI Agent V11.4 started. Type /memory to inspect memory, /clear_memory to clear it, /clear_history to reset chat, or exit to quit.")
 
     while True:
         try:
@@ -618,6 +670,10 @@ if __name__ == "__main__":
             continue
         if user_input == "/clear_memory":
             clear_memory()
+            continue
+        if user_input == "/clear_history":
+            conversation_history.clear()
+            print("Session conversation history cleared.")
             continue
 
         answer = run_agent(user_input)

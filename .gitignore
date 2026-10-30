@@ -1,8 +1,29 @@
-@"
+# Virtual environments
 agent-env/
+venv/
+env/
+.venv/
+
+# Python cache & bytecode
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+
+# Environment variables & secrets
 .env
-*.text
-*.txt
-"@ | Out-File -Encoding utf8 .gitignore
+.env.*
+
+# Runtime Agent State & User Memory
+ai-agent/memory.json
+memory.json
+*.tmp
+ai-agent/memory_store/
+memory_store/
+ai-agent/vector_store/
+vector_store/
+
+# IDE & OS files
+.vscode/
+.idea/
+*.DS_Store
+*.swp
