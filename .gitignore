@@ -21,6 +21,8 @@ ai-agent/memory_store/
 memory_store/
 ai-agent/vector_store/
 vector_store/
+ai-agent/sandbox/
+sandbox/
 
 # IDE & OS files
 .vscode/
