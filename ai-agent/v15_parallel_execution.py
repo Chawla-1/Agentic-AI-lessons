@@ -137,8 +137,11 @@ class FactExtractionItem(BaseModel):
             "task": "tasks",
             "tool": "tools",
             "skill": "skills",
+            "occupation": "skills",
             "project": "projects",
             "hobby": "hobbies",
+            "interest": "hobbies",
+            "interests": "hobbies",
             "preference": "preferences",
             "goal": "goals",
         }
