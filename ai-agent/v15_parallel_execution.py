@@ -1342,6 +1342,7 @@ def execute_dag_plan(goal_text: str, steps: list[dict[str, Any]], memory_context
 
         # 2. Execute Privileged Steps sequentially on Main Thread for Safe Console Interaction
         for p_step in privileged_steps:
+            safe_print(f"--> [Coordinator Gate] Routing Privileged Step {p_step['id']} ('{p_step['tool']}') to Main Thread for Interactive Approval Gate.")
             p_id, p_succ, p_res, p_err, p_elap = execute_step_worker(p_step, goal_text, context_summary, memory_context)
             step_results_map[p_id] = (p_succ, p_res, p_err, p_elap)
 
