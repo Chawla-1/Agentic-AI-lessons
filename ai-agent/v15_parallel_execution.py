@@ -1246,6 +1246,18 @@ Synthesize a comprehensive, clear, and direct response that completes this step 
             return step_id, False, None, str(error), elapsed
 
 
+def find_ready_wavefront(all_steps: list[dict[str, Any]], completed_ids: set[int]) -> list[dict[str, Any]]:
+    """
+    Topological Wavefront Discovery:
+    Identifies all steps whose incoming dependencies are completely satisfied by completed steps.
+    All discovered steps form an independent wavefront capable of executing in parallel.
+    """
+    return [
+        s for s in all_steps
+        if s["status"] == "PENDING" and all(dep in completed_ids for dep in s["depends_on"])
+    ]
+
+
 def execute_dag_plan(goal_text: str, steps: list[dict[str, Any]], memory_context: str = "") -> str:
     replan_count = 0
     tool_call_count = 0
@@ -1257,10 +1269,7 @@ def execute_dag_plan(goal_text: str, steps: list[dict[str, Any]], memory_context
         completed_ids = {s["id"] for s in all_steps if s["status"] == "COMPLETED"}
 
         # Find ALL steps ready for execution in the current Wavefront
-        ready_steps = [
-            s for s in all_steps
-            if s["status"] == "PENDING" and all(dep in completed_ids for dep in s["depends_on"])
-        ]
+        ready_steps = find_ready_wavefront(all_steps, completed_ids)
 
         if not ready_steps:
             pending_steps = [s for s in all_steps if s["status"] == "PENDING"]
