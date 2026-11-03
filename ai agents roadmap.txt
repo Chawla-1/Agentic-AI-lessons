@@ -13,11 +13,11 @@ Phase 1 · Reliability and intelligence
 [x] V12 — Semantic long-term memory: Embed memories, index them, retrieve relevant facts and filter irrelevant results.
 [x] V13 — Memory lifecycle: Add, update, merge, forget, expire and resolve conflicting memories with provenance.
 [x] V14 — Reliable planning and recovery: Preconditions, dependencies, execution state, retries, replanning, stopping conditions and safe expression parsing.
-[ ] V14.1 — Structured outputs and validation: Validate model-generated JSON against schemas, handle malformed outputs and enforce tool argument types.
-[ ] V14.2 — Agent security fundamentals: Prompt injection, untrusted retrieved content, least-privilege tools, approval gates and action limits.
+[x] V14.1 — Structured outputs and validation: Validate model-generated JSON against schemas, handle malformed outputs and enforce tool argument types.
+[x] V14.2 — Agent security fundamentals: Prompt injection, untrusted retrieved content, least-privilege tools, approval gates and action limits.
 
 Phase 2 · Advanced agent execution
-[ ] V15 — Parallel tool execution: Run independent operations concurrently; preserve dependencies, timeouts, cancellation and error isolation.
+[x] V15 — Parallel tool execution: Run independent operations concurrently; preserve dependencies, timeouts, cancellation and error isolation.
 [ ] V16 — Multi-agent architecture: Specialist agents, supervisor, task delegation, shared state, result aggregation and disagreement resolution.
 [ ] V16.1 — Human-in-the-loop workflows: Pause for approvals, resume safely, handle user corrections and persist workflow state.
 [ ] V17 — Evaluation and observability: Test datasets, task success rates, tool-call accuracy, retrieval quality, traces, latency, token usage and failure analysis.
