@@ -1382,7 +1382,7 @@ def execute_dag_plan(goal_text: str, steps: list[dict[str, Any]], memory_context
 
     display_checklist(all_steps)
     completed_steps = [s for s in all_steps if s["status"] == "COMPLETED"]
-    final_answer = completed_steps[-1]['result'] if completed_steps and completed_steps[-1].get('result') else 'Completed.'
+    final_answer = audit_and_synthesize_response(goal_text, completed_steps, memory_context)
     return sanitize_agent_output(final_answer)
 
 
