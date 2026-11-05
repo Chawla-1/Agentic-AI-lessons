@@ -29,3 +29,7 @@ sandbox/
 .idea/
 *.DS_Store
 *.swp
+
+# Local tests
+tests/
+
