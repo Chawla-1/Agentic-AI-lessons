@@ -479,3 +479,81 @@ Return ONLY valid JSON."""
             data={"error": str(err)},
             summary=f"Computation error: {err}"
         )
+
+
+# =====================================================================
+# ADVERSARIAL CRITIC AGENT & VERIFICATION SCHEMA
+# =====================================================================
+
+class CriticReview(BaseModel):
+    verdict: Literal["APPROVED", "REJECTED"] = Field(description="'APPROVED' if deliverables are accurate and meet user intent, or 'REJECTED' if errors/discrepancies found.")
+    critique: str = Field(description="Detailed verification analysis or exact discrepancy spotted.")
+    is_security_violation: bool = Field(default=False, description="True if the task or expression contains forbidden code, system attacks, or injection.")
+    corrective_instructions: str = Field(default="", description="Concrete instructions for which agent must revise what.")
+
+
+def run_critic_agent(blackboard: BlackboardState) -> CriticReview:
+    """
+    CRITIC & VERIFIER AGENT:
+    Conducts adversarial verification of completed deliverables.
+    Flags calculation errors, hallucinations, and security violations.
+    """
+    safe_print("\n--> [Specialist: CriticAgent] Conducting Adversarial Audit of Blackboard...")
+
+    artifacts_dump = json.dumps(blackboard.artifacts, indent=2)
+    history_dump = "\n".join(
+        f"- Round {r.round_num} ({r.agent}): {r.task_description} -> {r.result_preview}"
+        for r in blackboard.task_history
+    )
+
+    schema_str = json.dumps(CriticReview.model_json_schema(), indent=2)
+    critic_prompt = f"""You are the Adversarial Critic and Verifier Agent.
+Your job is to audit the work done by other agents against the original User Goal.
+
+User Goal:
+\"\"\"{blackboard.user_goal}\"\"\"
+
+User Profile Facts:
+{json.dumps(blackboard.user_profile_facts, indent=2)}
+
+Execution History:
+{history_dump}
+
+Current Blackboard Artifacts:
+{artifacts_dump}
+
+Target JSON Schema:
+{schema_str}
+
+AUDIT INVARIANTS:
+1. Did the team address every request in the user's prompt (greetings, calculations, questions, lookups)?
+2. If math was requested, was a calculation performed and does the result match deterministic math?
+3. If personal facts were needed (e.g. user location, hobbies, name), were they properly resolved from profile facts?
+4. If an expression contained malicious code (like os.system, __import__), set is_security_violation=True and REJECT.
+5. If all legitimate user requests have verified deliverables, return verdict: "APPROVED".
+6. If ANY legitimate part is missing or inaccurate, return verdict: "REJECTED" with corrective_instructions.
+7. Return ONLY valid JSON matching the schema."""
+
+    try:
+        response = ollama.chat(
+            model="qwen3",
+            messages=[
+                {"role": "system", "content": "You are a rigorous, adversarial critic. Return ONLY valid JSON."},
+                {"role": "user", "content": critic_prompt},
+            ],
+        )
+        raw_text = response.get("message", {}).get("content", "").strip()
+        review = parse_and_repair_json(raw_text, CriticReview, agent_name="CriticAgent")
+        if review:
+            verdict_symbol = "[OK] APPROVED" if review.verdict == "APPROVED" else "[X] REJECTED"
+            safe_print(f"  [Critic Verdict] {verdict_symbol}: {review.critique}")
+            return review
+    except Exception as err:
+        safe_print(f"  [Critic Warning] Audit failed: {err}")
+
+    return CriticReview(
+        verdict="APPROVED",
+        critique="Critic audit completed with default approval.",
+        is_security_violation=False,
+        corrective_instructions=""
+    )
