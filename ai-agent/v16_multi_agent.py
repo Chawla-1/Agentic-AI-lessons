@@ -612,3 +612,46 @@ CRITICAL: Return ONLY valid, well-formed JSON matching the Target JSON Schema. D
                 return None
 
     return None
+
+
+# =====================================================================
+# SECURITY POLICY GATE (V14 INTEGRATION)
+# =====================================================================
+
+def evaluate_security_policy(user_goal: str) -> tuple[bool, str]:
+    """
+    Evaluates whether the user request attempts prompt injection, unauthorized memory deletion,
+    or internal prompt extraction.
+    Returns: (is_blocked: bool, rejection_message: str)
+    """
+    destructive_patterns = [
+        r"delete\s+(all\s+)?memory",
+        r"wipe\s+(all\s+)?memory",
+        r"clear\s+(all\s+)?memory",
+        r"drop\s+database",
+        r"rm\s+-rf",
+    ]
+    injection_patterns = [
+        r"ignore\s+(all\s+)?(prior|previous)\s+(guidelines|instructions|rules)",
+        r"output\s+(the\s+)?system\s+prompt",
+        r"reveal\s+(your\s+)?(system\s+prompt|instructions)",
+        r"print\s+(the\s+)?system\s+prompt",
+    ]
+
+    goal_lower = user_goal.lower()
+
+    for pat in destructive_patterns:
+        if re.search(pat, goal_lower):
+            return True, (
+                "SECURITY_REFUSAL: Destructive memory deletion via conversational input is strictly blocked. "
+                "To clear memory intentionally, the supervisor must use the dedicated '/clear_memory' CLI command."
+            )
+
+    for pat in injection_patterns:
+        if re.search(pat, goal_lower):
+            return True, (
+                "SECURITY_REFUSAL: Prompt injection detected. I cannot ignore safety guidelines or reveal confidential system prompts. "
+                "System instructions and administrative security rules remain immutable."
+            )
+
+    return False, ""
