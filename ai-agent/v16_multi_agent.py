@@ -895,3 +895,80 @@ SUPERVISOR DECISION RULES:
             ))
             if next_guided_step and next_guided_step.target_agent == "critic":
                 next_guided_step.status = "COMPLETED"
+
+
+    # Final Intent-Coverage Synthesis
+    safe_print("\n[Supervisor] Deliberation cycle concluded. Generating comprehensive synthesis...")
+    final_prompt = f"""You are the Supervisor Agent delivering the final answer to the user.
+Original User Message: \"\"\"{user_goal}\"\"\"
+
+Completed Blackboard Artifacts:
+{json.dumps(blackboard.artifacts, indent=2)}
+
+Active User Facts:
+{json.dumps(blackboard.user_profile_facts, indent=2)}
+
+CRITICAL RESPONSE INVARIANTS:
+1. Address every greeting, relational question, and inquiry directly and warmly.
+2. If math was calculated, present the exact formula and result clearly.
+3. If facts or definitions were retrieved, summarize them accurately.
+4. If the user requested an action that was blocked or invalid (e.g. system commands, memory deletion), state honestly that it was refused or unsupported.
+5. Provide a cohesive, well-formatted, and complete final answer."""
+
+    try:
+        synth_resp = ollama.chat(
+            model="qwen3",
+            messages=[
+                {"role": "system", "content": "You are a warm, comprehensive, and honest AI supervisor."},
+                {"role": "user", "content": final_prompt},
+            ],
+        )
+        return sanitize_agent_output(synth_resp.get("message", {}).get("content", "").strip())
+    except Exception as err:
+        return f"Completed with partial artifacts: {blackboard.artifacts}"
+
+
+# =====================================================================
+# INTERACTIVE CLI LOOP
+# =====================================================================
+
+def main():
+    safe_print("=" * 75)
+    safe_print("AI Agent V16 (Refined Multi-Agent Architecture & Plan-First Supervisor)")
+    safe_print("Team Members: Supervisor, ResearcherAgent, ComputationAgent, CriticAgent")
+    safe_print("Commands:")
+    safe_print("  /blackboard          - Inspect active blackboard state")
+    safe_print("  /memory              - List active memories & facts")
+    safe_print("  exit / quit          - Exit agent")
+    safe_print("=" * 75)
+
+    while True:
+        try:
+            user_input = input("\nYou: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            safe_print("\nGoodbye!")
+            break
+
+        if not user_input:
+            continue
+
+        if user_input.lower() in {"exit", "quit"}:
+            safe_print("Goodbye!")
+            break
+
+        if user_input.lower() == "/memory":
+            active_facts = [r for r in memory_records if is_record_active(r)]
+            safe_print(f"\n[Semantic Memory Ledger] {len(active_facts)} Active Facts:")
+            for r in active_facts:
+                safe_print(f"  * [ID {r['id']}] ({r.get('category')}) {r['statement']}")
+            continue
+
+        start_time = time.perf_counter()
+        final_answer = run_supervisor_orchestration(user_input)
+        elapsed = time.perf_counter() - start_time
+
+        safe_print(f"\nAgent (Multi-Agent Team [{elapsed:.2f}s]):\n{final_answer}")
+
+
+if __name__ == "__main__":
+    main()
