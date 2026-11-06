@@ -2,11 +2,11 @@
 
 A comprehensive, ground-up implementation of autonomous AI agent architectures using local LLMs (**Qwen3**) and vector similarity search (**FAISS**).
 
-This repository traces the complete cognitive evolution of an AI agent—from a primitive rule-based function dispatcher to an autonomous, self-healing agent capable of dependency-aware DAG planning, dynamic replanning, multi-worker parallel execution, and full memory lifecycle management.
+This repository traces the complete cognitive evolution of an AI agent—from a primitive rule-based function dispatcher to an autonomous, self-healing agent capable of dependency-aware DAG planning, dynamic replanning, multi-worker parallel execution, full memory lifecycle management, and hierarchical multi-agent architectures.
 
 ---
 
-## 🏛️ Architecture Progression (V01 → V15)
+## 🏛️ Architecture Progression (V01 → V16)
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -27,6 +27,7 @@ This repository traces the complete cognitive evolution of an AI agent—from a 
 │ v13: Structured Outputs & Validation (Pydantic contracts & self-repair)│
 │ v14: Agent Security Fundamentals (Least privilege, gates & sandboxing) │
 │ v15: Parallel Execution & Wavefront Scheduler (Concurrent DAG executor)│
+│ v16: Multi-Agent Architecture (Supervisor, specialists & blackboard)  │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -53,6 +54,7 @@ All agent source files reside in the [`ai-agent/`](./ai-agent/) directory:
 | **V13** | [`v13_structured_outputs.py`](./ai-agent/v13_structured_outputs.py) | **Structured Outputs & Schema Contracts:** Pydantic domain models, type-safe argument parsing, and automated schema repair loops for malformed LLM outputs. |
 | **V14** | [`v14_agent_security.py`](./ai-agent/v14_agent_security.py) | **Agent Security Architecture:** Defense-in-depth, prompt injection defense, untrusted context taint tracking, least-privilege RBAC tiers, human approval gates, and circuit breakers. |
 | **V15** | [`v15_parallel_execution.py`](./ai-agent/v15_parallel_execution.py) | **Parallel Execution & Wavefront Scheduler:** Concurrent tool execution using `ThreadPoolExecutor`, topological wavefront scheduling, timeout isolation, and generalized intent-coverage synthesis. |
+| **V16** | [`v16_multi_agent.py`](./ai-agent/v16_multi_agent.py) | **Hierarchical Multi-Agent Architecture:** Supervisor orchestrator, plan-first task decomposition, specialist agents (`ResearcherAgent`, `ComputationAgent`, `CriticAgent`), shared Blackboard state, and adversarial verification loops. |
 
 ---
 
@@ -79,33 +81,28 @@ pip install ollama faiss-cpu numpy pydantic
 
 ### Running an Agent
 
-Run any milestone directly. For example, to run the parallel wavefront agent:
+Run any milestone directly. For example, to run the multi-agent system:
 
 ```bash
 cd ai-agent
-python v15_parallel_execution.py
+python v16_multi_agent.py
 ```
 
-#### Available Commands in V15:
-- `/plan <goal>` — Explicitly decompose and execute a multi-step mission with concurrent wavefront scheduling and live status checklist.
-- `/memory` — Inspect all active atomic facts and TTL expiration timers.
-- `/memory_all` — Inspect the full lifecycle audit ledger (including superseded and expired records).
-- `/security_audit` — Inspect security events (gates, circuit breakers, sandboxing blocks).
-- `/clear_history` — Reset the current session's short-term conversation context.
-- `/clear_memory` — Wipe the persistent vector memory store (Protected by supervisor gate).
+#### Available Commands in V16:
+- `/blackboard` — Inspect active blackboard state, artifacts, and task history.
+- `/memory` — Inspect active atomic biographical facts from semantic vector memory.
 - `exit` — Terminate session.
 
 ---
 
 ## 🛠️ Key Technical Highlights
 
-- **Concurrent Wavefront DAG Scheduler:** Implements topological wavefront discovery (`find_ready_wavefront`). Steps with zero pending dependencies execute concurrently in a worker pool (`ThreadPoolExecutor`), while dependent steps wait at synchronization barriers, maximizing throughput while preserving exact computational ordering.
-- **Generalized Intent-Coverage Auditor:** Eliminates fragile keyword heuristics. Evaluates raw user prompt tokens sentence-by-sentence against completed execution outputs to guarantee 100% intent coverage (greetings, calculations, informational requests).
-- **Automated Pydantic Schema Self-Repair:** Validates raw LLM outputs against strict Pydantic schemas. On validation failure, captures the precise schema errors and re-prompts the model with targeted error context, achieving high parsing reliability.
-- **Defense-in-Depth Security & Privilege Separation:** Classifies tools into `READ_ONLY`, `LOW_IMPACT_WRITE`, and `PRIVILEGED` tiers. Prevents console input races by isolating interactive approval gates on the coordinator thread, while background tasks run safely in worker threads.
-- **Autonomous Dynamic Replanning:** When an intermediate step fails, the engine catches the error, halts forward execution, prompts the LLM with the failure traceback, and autonomously rewrites the remaining DAG to recover.
-- **Semantic Conflict Judge:** Solves the mutability problem in vector stores. When a candidate fact matches an existing fact ($\ge 0.60$ cosine similarity), an LLM judge decides whether to supersede/replace the old fact or keep both.
-- **Sandboxed Evaluation:** Uses Python's `ast.parse` and abstract syntax tree traversal to compute math expressions safely without vulnerable `eval()`.
+- **Hierarchical Multi-Agent Orchestration:** Decomposes complex missions into specialized domains. A central **SupervisorAgent** delegates tasks to specialist workers (`ResearcherAgent`, `ComputationAgent`, `CriticAgent`) via typed Pydantic contracts.
+- **Shared Blackboard Architecture:** Decouples worker agents through a thread-safe `BlackboardState` storing verified artifacts, user context, and execution audit history without context window contamination.
+- **Adversarial Critic & Disagreement Protocol:** An independent `CriticAgent` audits intermediate deliverables against the original user goal before conclusion. Discrepancies trigger targeted revision loops to correct errors before final synthesis.
+- **Concurrent Wavefront DAG Scheduler (V15):** Groups zero-dependency tasks into parallel wavefronts via `ThreadPoolExecutor` with barrier synchronization.
+- **Automated Pydantic Schema Self-Repair:** Intercepts JSON parsing and validation failures, prompts Qwen3 with schema diffs, and heals malformed payloads automatically.
+- **Defense-in-Depth Security Gateways:** Enforces prompt injection defense, sandboxed AST math evaluation, and approval gates for destructive operations.
 - **Local & Private:** Zero API costs, zero telemetry, and 100% offline-capable execution.
 
 ---
@@ -119,7 +116,7 @@ python v15_parallel_execution.py
 - [x] **Phase 1 (Milestone 5):** Structured Outputs & Schema Enforcement (`v13_structured_outputs.py`)
 - [x] **Phase 1 (Milestone 6):** Agent Security Fundamentals (`v14_agent_security.py`)
 - [x] **Phase 2 (Milestone 1):** Parallel Tool Execution & Wavefront Scheduler (`v15_parallel_execution.py`)
-- [ ] **Phase 2 (Milestone 2):** Multi-Agent Architecture (Supervisor, specialists, task delegation, consensus)
+- [x] **Phase 2 (Milestone 2):** Multi-Agent Architecture (`v16_multi_agent.py`)
 - [ ] **Phase 2 (Milestone 3):** Human-in-the-Loop Workflows
 - [ ] **Phase 2 (Milestone 4):** Evaluation & Observability
 - [ ] **Phase 3:** Production Frameworks (LangGraph, custom checkpointers, stateful graphs)
