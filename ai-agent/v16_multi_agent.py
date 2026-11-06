@@ -655,3 +655,55 @@ def evaluate_security_policy(user_goal: str) -> tuple[bool, str]:
             )
 
     return False, ""
+
+
+# =====================================================================
+# SUPERVISOR AGENT: DECOMPOSITION & ORCHESTRATION
+# =====================================================================
+
+def plan_initial_decomposition(user_goal: str, user_facts: list[str]) -> list[PlannedStep]:
+    """
+    PLAN-FIRST DECOMPOSITION:
+    Decomposes multi-part goals into structured steps to prevent premature FINISH.
+    """
+    schema_str = json.dumps(DecompositionPlan.model_json_schema(), indent=2)
+    prompt = f"""You are the Chief Planning Supervisor.
+Decompose the following user goal into a minimal, complete sequence of specialist tasks:
+1. 'researcher': For fact lookup, knowledge base search, profile questions, or weather.
+2. 'computation': For exact arithmetic, formula calculation, or letter/item counting.
+3. 'critic': For final adversarial verification.
+
+User Goal:
+\"\"\"{user_goal}\"\"\"
+
+Active User Facts:
+{json.dumps(user_facts, indent=2)}
+
+Target JSON Schema:
+{schema_str}
+
+RULES:
+- Address EVERY part of the user's prompt.
+- Always conclude the plan with a 'critic' step.
+- Return ONLY valid JSON matching the schema."""
+
+    try:
+        response = ollama.chat(
+            model="qwen3",
+            messages=[
+                {"role": "system", "content": "You are a master task planner. Return ONLY valid JSON."},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        raw_text = response.get("message", {}).get("content", "").strip()
+        plan_obj = parse_and_repair_json(raw_text, DecompositionPlan, agent_name="PlanningSupervisor")
+        if plan_obj and plan_obj.plan:
+            return plan_obj.plan
+    except Exception as err:
+        safe_print(f"[Planner Warning] Auto-decomposition failed: {err}")
+
+    return [
+        PlannedStep(id=1, target_agent="researcher", task="Research any factual or memory questions in the goal", output_key="research_findings"),
+        PlannedStep(id=2, target_agent="computation", task="Perform any mathematical calculations requested", output_key="math_result"),
+        PlannedStep(id=3, target_agent="critic", task="Verify accuracy and completeness of deliverables", output_key="critic_review"),
+    ]
