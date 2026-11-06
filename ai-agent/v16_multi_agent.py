@@ -125,3 +125,224 @@ class SpecialistOutput(BaseModel):
     success: bool
     data: Any = Field(description="The primary deliverable produced by the specialist.")
     summary: str = Field(description="A concise summary of findings/results for the supervisor.")
+
+
+# =====================================================================
+# EMBEDDINGS & RETRIEVAL PRIMITIVES (RESEARCHER ACCESS)
+# =====================================================================
+
+def get_embedding(text: str) -> np.ndarray:
+    response = ollama.embed(model="nomic-embed-text", input=text)
+    vector = np.array(response["embeddings"][0], dtype="float32").reshape(1, -1)
+    faiss.normalize_L2(vector)
+    return vector
+
+
+def sanitize_untrusted_text(text: str) -> str:
+    cleaned = text.replace("&", "&amp;")
+    cleaned = cleaned.replace("<", "&lt;").replace(">", "&gt;")
+    return cleaned
+
+
+def load_knowledge_store():
+    if not os.path.exists(KNOWLEDGE_INDEX_FILE) or not os.path.exists(KNOWLEDGE_CHUNKS_FILE):
+        return None, []
+    try:
+        loaded_index = faiss.read_index(KNOWLEDGE_INDEX_FILE)
+        with open(KNOWLEDGE_CHUNKS_FILE, "r", encoding="utf-8") as file:
+            loaded_chunks = json.load(file)
+        return loaded_index, loaded_chunks
+    except Exception as error:
+        safe_print(f"Warning: could not load knowledge store: {error}")
+        return None, []
+
+
+knowledge_index, knowledge_chunks = load_knowledge_store()
+
+
+def search_knowledge_tool(query: str) -> str:
+    if knowledge_index is None or not knowledge_chunks:
+        return "Knowledge search unavailable: vector store is missing or empty."
+
+    query_vec = get_embedding(query)
+    scores, indices = knowledge_index.search(query_vec, min(TOP_K_KNOWLEDGE, len(knowledge_chunks)))
+
+    results = []
+    for index_id in indices[0]:
+        if index_id == -1 or index_id >= len(knowledge_chunks):
+            continue
+        chunk = knowledge_chunks[index_id]
+        source_name = sanitize_untrusted_text(chunk.get("source", "Unknown"))
+        raw_body = chunk.get("text", "")
+        sanitized_body = sanitize_untrusted_text(raw_body)
+        tainted_block = (
+            f"<untrusted_rag_context source=\"{source_name}\" data_tainted=\"true\">\n"
+            f"{sanitized_body}\n"
+            f"</untrusted_rag_context>"
+        )
+        results.append(tainted_block)
+
+    if not results:
+        return "No relevant information found in knowledge base."
+    return "\n\n".join(results)
+
+
+# =====================================================================
+# SEMANTIC MEMORY RETRIEVAL (USER PROFILE)
+# =====================================================================
+
+memory_records = []
+active_fact_ids = []
+memory_index = None
+
+
+def is_record_active(r: dict[str, Any]) -> bool:
+    return bool(r.get("is_active", True))
+
+
+def load_memory_store():
+    global memory_records
+    os.makedirs(MEMORY_STORE_DIR, exist_ok=True)
+    if os.path.exists(MEMORY_RECORDS_FILE):
+        try:
+            with open(MEMORY_RECORDS_FILE, "r", encoding="utf-8") as file:
+                memory_records = json.load(file)
+        except Exception as error:
+            safe_print(f"Warning: could not load memory records: {error}")
+            memory_records = []
+
+
+def rebuild_memory_index():
+    global memory_index, active_fact_ids
+    active_facts = [r for r in memory_records if is_record_active(r)]
+    active_fact_ids = [r["id"] for r in active_facts]
+
+    if not active_facts:
+        memory_index = faiss.IndexFlatIP(MEMORY_EMBED_DIM)
+        return
+
+    vectors = []
+    valid_ids = []
+    for r in active_facts:
+        try:
+            vec = get_embedding(r["statement"])
+            vectors.append(vec[0])
+            valid_ids.append(r["id"])
+        except Exception as error:
+            safe_print(f"Warning: could not embed memory ID {r.get('id')}: {error}")
+
+    if vectors:
+        matrix = np.array(vectors, dtype="float32")
+        faiss.normalize_L2(matrix)
+        memory_index = faiss.IndexFlatIP(MEMORY_EMBED_DIM)
+        memory_index.add(matrix)
+        active_fact_ids = valid_ids
+    else:
+        memory_index = faiss.IndexFlatIP(MEMORY_EMBED_DIM)
+        active_fact_ids = []
+
+
+load_memory_store()
+rebuild_memory_index()
+
+
+def get_relevant_memories(query: str, top_k: int = TOP_K_MEMORY, threshold: float = MEMORY_SIMILARITY_THRESHOLD) -> list[tuple[dict[str, Any], float]]:
+    if memory_index is None or memory_index.ntotal == 0 or not active_fact_ids:
+        return []
+
+    id_to_record = {r["id"]: r for r in memory_records if is_record_active(r)}
+    query_vec = get_embedding(query)
+    scores, indices = memory_index.search(query_vec, min(top_k, memory_index.ntotal))
+
+    results = []
+    for score, idx in zip(scores[0], indices[0]):
+        if idx == -1 or idx >= len(active_fact_ids):
+            continue
+        fact_id = active_fact_ids[idx]
+        record = id_to_record.get(fact_id)
+        if record and float(score) >= threshold:
+            results.append((record, float(score)))
+
+    return results
+
+
+def format_memory_context(relevant_memories: list[tuple[dict[str, Any], float]]) -> str:
+    if not relevant_memories:
+        return ""
+    lines = ["[Semantic Memory Context: Active Biographical Facts]"]
+    for rec, score in relevant_memories:
+        lines.append(f"- ({score:.3f}) [ID {rec['id']}] {rec['statement']}")
+    return "\n".join(lines)
+
+
+def weather_tool(city: str = "") -> str:
+    clean_city = str(city).strip() if city else ""
+    if not clean_city:
+        for r in memory_records:
+            if is_record_active(r) and r.get("category") in {"location", "city"}:
+                clean_city = str(r.get("item", "")).strip()
+                break
+    if not clean_city:
+        return "CLARIFICATION_NEEDED: Location was not specified by user and is not present in profile."
+    return f"Live weather lookup for '{clean_city}' is currently sunny and 24 C."
+
+
+def run_researcher_agent(task_instruction: str, blackboard: BlackboardState) -> SpecialistOutput:
+    """
+    RESEARCHER AGENT:
+    Retrieves facts from Vector Knowledge Base (RAG) and Semantic User Memory.
+    Also has access to the live weather lookup tool.
+    """
+    safe_print(f"\n--> [Specialist: ResearcherAgent] Executing: '{task_instruction}'")
+
+    weather_info = ""
+    if "weather" in task_instruction.lower():
+        weather_info = weather_tool()
+
+    rag_results = search_knowledge_tool(task_instruction)
+    mem_results = get_relevant_memories(task_instruction, top_k=3)
+
+    research_context = f"""Task: {task_instruction}
+Knowledge Base Findings:
+{rag_results}
+
+Semantic User Profile Facts:
+{format_memory_context(mem_results)}"""
+
+    if weather_info:
+        research_context += f"\n\nLive Weather Data:\n{weather_info}"
+
+    prompt = f"""You are the Researcher Agent.
+Synthesize the research findings for the given task using ONLY the retrieved facts.
+
+{research_context}
+
+CRITICAL RULES:
+1. Cite facts accurately from the knowledge base or user profile.
+2. If the user's name, hobbies, or location are requested, use the exact facts from Semantic User Profile Facts.
+3. If weather is requested, state the live weather data clearly.
+4. Output a concise, factual, evidence-based research report."""
+
+    try:
+        response = ollama.chat(
+            model="qwen3",
+            messages=[
+                {"role": "system", "content": "You are a precise, evidence-based academic researcher agent."},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        report = response.get("message", {}).get("content", "").strip()
+        safe_print(f"  [Researcher Output] {report[:140]}...")
+        return SpecialistOutput(
+            agent_name="researcher",
+            success=True,
+            data=report,
+            summary=f"Synthesized research report ({len(report)} chars)"
+        )
+    except Exception as err:
+        return SpecialistOutput(
+            agent_name="researcher",
+            success=False,
+            data=str(err),
+            summary=f"Researcher error: {err}"
+        )
