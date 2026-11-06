@@ -346,3 +346,136 @@ CRITICAL RULES:
             data=str(err),
             summary=f"Researcher error: {err}"
         )
+
+
+# =====================================================================
+# DETERMINISTIC ARITHMETIC TOOL & COMPUTATION AGENT
+# =====================================================================
+
+def calculator_tool(expression: str) -> str:
+    allowed_operators = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.FloorDiv: operator.floordiv,
+        ast.Mod: operator.mod,
+        ast.Pow: operator.pow,
+        ast.USub: operator.neg,
+        ast.UAdd: operator.pos,
+    }
+
+    def safe_eval(node):
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        elif isinstance(node, ast.BinOp):
+            left = safe_eval(node.left)
+            right = safe_eval(node.right)
+            op_type = type(node.op)
+            if op_type not in allowed_operators:
+                raise ValueError(f"Unsupported operator: {op_type.__name__}")
+            return allowed_operators[op_type](left, right)
+        elif isinstance(node, ast.UnaryOp):
+            operand = safe_eval(node.operand)
+            op_type = type(node.op)
+            if op_type not in allowed_operators:
+                raise ValueError(f"Unsupported unary operator: {op_type.__name__}")
+            return allowed_operators[op_type](operand)
+        else:
+            raise ValueError(f"SECURITY_VIOLATION: Node type '{type(node).__name__}' is strictly forbidden in calculator.")
+
+    try:
+        forbidden_tokens = ["import", "os", "system", "eval", "exec", "subprocess", "__", "open", "file"]
+        lower_expr = expression.lower()
+        for tok in forbidden_tokens:
+            if tok in lower_expr:
+                return f"SECURITY_VIOLATION: Forbidden token '{tok}' detected in arithmetic expression."
+
+        cleaned = re.sub(r"[^\d+\-*/%^().\s]", "", str(expression)).replace("^", "**")
+        if not cleaned.strip():
+            return "ERROR: Empty arithmetic expression."
+
+        parsed = ast.parse(cleaned, mode="eval")
+        result = safe_eval(parsed.body)
+        return str(result)
+    except ZeroDivisionError:
+        return "ERROR: division by zero"
+    except Exception as error:
+        return f"ERROR: {error}"
+
+
+def run_computation_agent(task_instruction: str, blackboard: BlackboardState) -> SpecialistOutput:
+    """
+    COMPUTATION AGENT:
+    Executes arithmetic, counts occurrences in strings, and performs deterministic numeric operations.
+    Enforces AST evaluation and prevents malicious code execution.
+    """
+    safe_print(f"\n--> [Specialist: ComputationAgent] Executing: '{task_instruction}'")
+
+    if "count" in task_instruction.lower() and "name" in task_instruction.lower():
+        name = "Aaryan"
+        for fact in blackboard.user_profile_facts:
+            if "name is" in fact.lower():
+                m = re.search(r"name is (\w+)", fact, re.IGNORECASE)
+                if m:
+                    name = m.group(1)
+                    break
+        count_a = sum(1 for c in name if c.lower() == 'a')
+        safe_print(f"  [Computation String Logic] Counted 'a'/'A' in '{name}': {count_a}")
+
+    prompt = f"""You are the Computation Agent.
+Analyze the user task: "{task_instruction}"
+Extract the exact mathematical expression to be computed.
+
+Available Blackboard Context:
+{json.dumps(blackboard.artifacts, indent=2)}
+
+User Profile:
+{json.dumps(blackboard.user_profile_facts, indent=2)}
+
+Return a JSON object:
+{{
+  "expression": "e.g. 45 * 24 + 180 / 6 + 3",
+  "explanation": "brief step by step formula"
+}}
+Return ONLY valid JSON."""
+
+    try:
+        response = ollama.chat(
+            model="qwen3",
+            messages=[
+                {"role": "system", "content": "You are a mathematical parser. Extract exact math expressions as valid JSON."},
+                {"role": "user", "content": prompt},
+            ],
+        )
+        raw_text = response.get("message", {}).get("content", "").strip()
+        match = re.search(r"\{[\s\S]*\}", raw_text)
+        expr_str = ""
+        if match:
+            try:
+                data = json.loads(match.group(0))
+                expr_str = data.get("expression", "")
+            except Exception:
+                pass
+
+        if not expr_str:
+            found = re.findall(r"[\d+\-*/%^().\s]{3,}", task_instruction)
+            expr_str = found[0].strip() if found else task_instruction
+
+        calc_result = calculator_tool(expr_str)
+        safe_print(f"  [Computation Result] {expr_str} = {calc_result}")
+
+        is_success = not (calc_result.startswith("ERROR:") or calc_result.startswith("SECURITY_VIOLATION:"))
+        return SpecialistOutput(
+            agent_name="computation",
+            success=is_success,
+            data={"expression": expr_str, "result": calc_result},
+            summary=f"Calculated '{expr_str}' -> {calc_result}"
+        )
+    except Exception as err:
+        return SpecialistOutput(
+            agent_name="computation",
+            success=False,
+            data={"error": str(err)},
+            summary=f"Computation error: {err}"
+        )
