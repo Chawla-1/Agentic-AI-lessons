@@ -18,7 +18,7 @@ Phase 1 · Reliability and intelligence
 
 Phase 2 · Advanced agent execution
 [x] V15 — Parallel tool execution: Run independent operations concurrently; preserve dependencies, timeouts, cancellation and error isolation.
-[ ] V16 — Multi-agent architecture: Specialist agents, supervisor, task delegation, shared state, result aggregation and disagreement resolution.
+[x] V16 — Multi-agent architecture: Specialist agents, supervisor, task delegation, shared state, result aggregation and disagreement resolution.
 [ ] V16.1 — Human-in-the-loop workflows: Pause for approvals, resume safely, handle user corrections and persist workflow state.
 [ ] V17 — Evaluation and observability: Test datasets, task success rates, tool-call accuracy, retrieval quality, traces, latency, token usage and failure analysis.
 
