@@ -707,3 +707,191 @@ RULES:
         PlannedStep(id=2, target_agent="computation", task="Perform any mathematical calculations requested", output_key="math_result"),
         PlannedStep(id=3, target_agent="critic", task="Verify accuracy and completeness of deliverables", output_key="critic_review"),
     ]
+
+
+def run_supervisor_orchestration(user_goal: str) -> str:
+    """
+    REFINED SUPERVISOR ORCHESTRATION LOOP:
+    1. Upfront Security Gatekeeper Check (Blocks injection & destructive actions).
+    2. Context Grounding with FAISS Vector Memory.
+    3. Plan-First Decomposition.
+    4. Deliberation & Dynamic Re-routing with Critic verification.
+    5. Final Intent-Coverage Synthesis.
+    """
+    safe_print("\n" + "=" * 70)
+    safe_print(f"[SUPERVISOR ACTIVATED] Mission: \"{user_goal}\"")
+    safe_print("=" * 70)
+
+    is_blocked, refusal_msg = evaluate_security_policy(user_goal)
+    if is_blocked:
+        safe_print(f"\n[SECURITY GATEWAY ACTIVATED] Request blocked: {refusal_msg}")
+        return refusal_msg
+
+    relevant_memories = get_relevant_memories(user_goal, top_k=4)
+    user_facts = [r["statement"] for r, score in relevant_memories]
+
+    if not any("name is" in f.lower() for f in user_facts):
+        for r in memory_records:
+            if is_record_active(r) and r.get("category") == "name":
+                user_facts.insert(0, r["statement"])
+                break
+
+    if user_facts:
+        safe_print(f"[Blackboard Grounding] Injected {len(user_facts)} active facts from Semantic Memory.")
+
+    initial_plan = plan_initial_decomposition(user_goal, user_facts)
+    safe_print(f"\n[Supervisor Plan Established] {len(initial_plan)} Step(s):")
+    for s in initial_plan:
+        safe_print(f"  Step {s.id}: [{s.target_agent.upper()}] -> {s.task}")
+
+    blackboard = BlackboardState(
+        user_goal=user_goal,
+        delegation_plan=initial_plan,
+        user_profile_facts=user_facts,
+    )
+
+    schema_str = json.dumps(SupervisorDecision.model_json_schema(), indent=2)
+
+    for round_num in range(1, MAX_ROUNDS + 1):
+        safe_print(f"\n--- [Round {round_num}/{MAX_ROUNDS}] Supervisor Deliberation ---")
+
+        pending_plan_steps = [s for s in blackboard.delegation_plan if s.status == "PENDING"]
+        critic_approved = any(
+            r.agent == "critic" and "APPROVED" in r.result_preview
+            for r in blackboard.task_history
+        )
+
+        artifacts_preview = json.dumps(blackboard.artifacts, indent=2)
+        history_preview = "\n".join(
+            f"Round {r.round_num}: {r.agent} -> {r.output_key} ({r.result_preview})"
+            for r in blackboard.task_history
+        ) or "None yet."
+
+        critic_context = "\n".join(blackboard.critic_notes) if blackboard.critic_notes else "No issues noted."
+
+        if not pending_plan_steps and critic_approved:
+            safe_print("[Supervisor Decision] All planned tasks executed and verified by Critic. Proceeding to synthesis.")
+            break
+
+        next_guided_step = pending_plan_steps[0] if pending_plan_steps else None
+        guided_hint = f"Recommended next step: Delegate to '{next_guided_step.target_agent}' for task: '{next_guided_step.task}'" if next_guided_step else "All initial plan steps done. If not yet verified by critic, delegate to 'critic'."
+
+        supervisor_prompt = f"""You are the Supervisor Agent managing a team of specialist AI agents:
+1. 'researcher': Retrieves external knowledge and user profile facts.
+2. 'computation': Performs exact arithmetic, counts, and mathematical computations.
+3. 'critic': Adversarially verifies completed blackboard artifacts before finishing.
+
+User Goal:
+\"\"\"{blackboard.user_goal}\"\"\"
+
+User Profile Facts:
+{json.dumps(blackboard.user_profile_facts, indent=2)}
+
+Current Blackboard Artifacts:
+{artifacts_preview}
+
+Execution History:
+{history_preview}
+
+Planner Guidance:
+{guided_hint}
+
+Recent Critic Notes:
+{critic_context}
+
+Target JSON Schema:
+{schema_str}
+
+SUPERVISOR DECISION RULES:
+1. If there are pending tasks in the planner guidance, DELEGATE to that specialist.
+2. Do NOT select 'FINISH' until all required research and calculations are on the blackboard AND verified by the 'critic'.
+3. If the critic reported a security violation or impossible calculation, do NOT loop endlessly—select 'FINISH' with an explanation of why that request cannot be completed.
+4. Return ONLY valid JSON matching the schema."""
+
+        decision: Optional[SupervisorDecision] = None
+        try:
+            response = ollama.chat(
+                model="qwen3",
+                messages=[
+                    {"role": "system", "content": "You are a strategic multi-agent supervisor. Return ONLY valid JSON."},
+                    {"role": "user", "content": supervisor_prompt},
+                ],
+            )
+            raw_text = response.get("message", {}).get("content", "").strip()
+            decision = parse_and_repair_json(raw_text, SupervisorDecision, agent_name="SupervisorAgent")
+        except Exception as err:
+            safe_print(f"[Supervisor Error] Call failed: {err}")
+
+        if not decision or (decision.action == "FINISH" and pending_plan_steps):
+            if next_guided_step:
+                safe_print(f"[Supervisor Enforcement] Overriding premature finish. Enforcing planned step {next_guided_step.id}.")
+                decision = SupervisorDecision(
+                    action="DELEGATE",
+                    target_agent=next_guided_step.target_agent,
+                    task_description=next_guided_step.task,
+                    output_key=next_guided_step.output_key
+                )
+            else:
+                break
+
+        if decision.action == "FINISH":
+            safe_print("\n[Supervisor Decision] Deliberation complete. Finalizing response.")
+            if decision.final_synthesis:
+                return sanitize_agent_output(decision.final_synthesis)
+            break
+
+        target = decision.target_agent
+        task_desc = decision.task_description
+        out_key = decision.output_key
+        safe_print(f"[Supervisor Delegation] -> Agent: '{target}' | Task: {task_desc}")
+
+        if target == "researcher":
+            worker_output = run_researcher_agent(task_desc, blackboard)
+            blackboard.artifacts[out_key] = worker_output.data
+            blackboard.task_history.append(TaskRecord(
+                round_num=round_num,
+                agent="researcher",
+                task_description=task_desc,
+                output_key=out_key,
+                result_preview=worker_output.summary
+            ))
+            if next_guided_step and next_guided_step.target_agent == "researcher":
+                next_guided_step.status = "COMPLETED"
+
+        elif target == "computation":
+            worker_output = run_computation_agent(task_desc, blackboard)
+            blackboard.artifacts[out_key] = worker_output.data
+            blackboard.task_history.append(TaskRecord(
+                round_num=round_num,
+                agent="computation",
+                task_description=task_desc,
+                output_key=out_key,
+                result_preview=worker_output.summary
+            ))
+            if next_guided_step and next_guided_step.target_agent == "computation":
+                next_guided_step.status = "COMPLETED"
+
+        elif target == "critic":
+            review = run_critic_agent(blackboard)
+            blackboard.artifacts["critic_review"] = review.model_dump()
+            if review.is_security_violation:
+                safe_print(f"  [Critic Alert] Security violation detected! Halting delegation loops.")
+                blackboard.critic_notes.append(f"SECURITY VIOLATION: {review.critique}")
+                break
+
+            if review.verdict == "REJECTED":
+                blackboard.critic_notes.append(f"Round {round_num} REJECTION: {review.critique} | Fix: {review.corrective_instructions}")
+                blackboard.status = "NEEDS_REVISION"
+            else:
+                blackboard.critic_notes.append(f"Round {round_num} APPROVED: {review.critique}")
+                blackboard.status = "COMPLETED"
+
+            blackboard.task_history.append(TaskRecord(
+                round_num=round_num,
+                agent="critic",
+                task_description="Adversarial verification of blackboard artifacts",
+                output_key="critic_review",
+                result_preview=f"Verdict: {review.verdict}"
+            ))
+            if next_guided_step and next_guided_step.target_agent == "critic":
+                next_guided_step.status = "COMPLETED"
