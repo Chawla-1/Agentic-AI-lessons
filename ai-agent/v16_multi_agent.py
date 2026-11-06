@@ -557,3 +557,58 @@ AUDIT INVARIANTS:
         is_security_violation=False,
         corrective_instructions=""
     )
+
+
+# =====================================================================
+# AUTOMATED SCHEMA VALIDATION WITH SELF-REPAIR
+# =====================================================================
+
+def parse_and_repair_json(raw_text: str, target_model: type[BaseModel], agent_name: str = "Agent") -> Optional[BaseModel]:
+    content = raw_text.strip()
+    match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
+    if match:
+        content = match.group(1).strip()
+    elif "{" in content and "}" in content:
+        start = content.find("{")
+        end = content.rfind("}") + 1
+        content = content[start:end]
+
+    for attempt in range(1, MAX_SCHEMA_REPAIR_ATTEMPTS + 1):
+        try:
+            parsed_json = json.loads(content)
+            validated = target_model.model_validate(parsed_json)
+            return validated
+        except (json.JSONDecodeError, ValidationError) as err:
+            safe_print(f"[{agent_name} Schema Validation: Intercepted Error] Attempt {attempt}/{MAX_SCHEMA_REPAIR_ATTEMPTS}: {err}")
+            if attempt == MAX_SCHEMA_REPAIR_ATTEMPTS:
+                return None
+
+            repair_prompt = f"""You previously returned an invalid JSON response for schema {target_model.__name__}.
+Validation Error:
+{err}
+
+Your Previous Output:
+{raw_text}
+
+Target JSON Schema:
+{json.dumps(target_model.model_json_schema(), indent=2)}
+
+CRITICAL: Return ONLY valid, well-formed JSON matching the Target JSON Schema. Do NOT include markdown blocks or any other commentary outside the JSON."""
+
+            try:
+                rep_resp = ollama.chat(
+                    model="qwen3",
+                    messages=[
+                        {"role": "system", "content": "You are a JSON schema repair technician. Output ONLY raw JSON matching schema."},
+                        {"role": "user", "content": repair_prompt},
+                    ],
+                )
+                content = rep_resp.get("message", {}).get("content", "").strip()
+                m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", content)
+                if m:
+                    content = m.group(1).strip()
+            except Exception as repair_err:
+                safe_print(f"[{agent_name}] Repair call failed: {repair_err}")
+                return None
+
+    return None
